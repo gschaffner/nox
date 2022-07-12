@@ -43,6 +43,7 @@ def session_decorator(
     venv_backend: Any | None = ...,
     venv_params: Any | None = ...,
     tags: Sequence[str] | None = ...,
+    requires: Sequence[str] | None = ...,
 ) -> Callable[[F], F]:
     ...
 
@@ -56,6 +57,7 @@ def session_decorator(
     venv_backend: Any | None = None,
     venv_params: Any | None = None,
     tags: Sequence[str] | None = None,
+    requires: Sequence[str] | None = None,
 ) -> F | Callable[[F], F]:
     """Designate the decorated function as a session."""
     # If `func` is provided, then this is the decorator call with the function
@@ -75,6 +77,7 @@ def session_decorator(
             venv_backend=venv_backend,
             venv_params=venv_params,
             tags=tags,
+            requires=requires,
         )
 
     if py is not None and python is not None:
@@ -88,7 +91,14 @@ def session_decorator(
 
     final_name = name or func.__name__
     fn = Func(
-        func, python, reuse_venv, final_name, venv_backend, venv_params, tags=tags
+        func,
+        python,
+        reuse_venv,
+        final_name,
+        venv_backend,
+        venv_params,
+        tags=tags,
+        requires=requires,
     )
     _REGISTRY[final_name] = fn
     return fn

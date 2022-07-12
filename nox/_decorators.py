@@ -69,6 +69,7 @@ class Func(FunctionDecorator):
         venv_params: Any = None,
         should_warn: Mapping[str, Any] | None = None,
         tags: Sequence[str] | None = None,
+        requires: Sequence[str] | None = None,
     ) -> None:
         self.func = func
         self.python = python
@@ -78,6 +79,7 @@ class Func(FunctionDecorator):
         self.venv_params = venv_params
         self.should_warn = dict(should_warn or {})
         self.tags = list(tags or [])
+        self.requires = list(requires or [])
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.func(*args, **kwargs)
@@ -94,6 +96,32 @@ class Func(FunctionDecorator):
             self.venv_params,
             self.should_warn,
             self.tags,
+            self._requires,
+        )
+
+    @property
+    def requires(self) -> list[str]:
+        # Compute dynamically on lookup since ``self.python`` can be modified after
+        # creation (e.g. on an instance from ``self.copy``).
+        return list(map(self.format_dependency, self._requires))
+
+    @requires.setter
+    def requires(self, value: list[str]) -> None:
+        self._requires = value
+
+    def format_dependency(self, dependency: str) -> str:
+        if isinstance(self.python, (str, bool)) or self.python is None:
+            formatted = dependency.format(python=self.python, py=self.python)
+            if formatted != dependency and (
+                self.python is None or isinstance(self.python, bool)
+            ):
+                raise ValueError(
+                    "Cannot parametrize requires with {python} when python is None or a"
+                    " bool."
+                )
+            return formatted
+        raise TypeError(
+            "The requires of a not-yet-parametrized session cannot be parametrized."
         )
 
 
@@ -125,6 +153,7 @@ class Call(Func):
             func.venv_params,
             func.should_warn,
             func.tags,
+            func.requires,
         )
         self.call_spec = call_spec
         self.session_signature = session_signature
