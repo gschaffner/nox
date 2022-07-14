@@ -72,6 +72,7 @@ class Func(FunctionDecorator):
         *,
         default: bool = True,
         requires: Sequence[str] | None = None,
+        venv: str | None = None,
     ) -> None:
         self.func = func
         self.python = python
@@ -83,6 +84,7 @@ class Func(FunctionDecorator):
         self.tags = list(tags or [])
         self.default = default
         self.requires = list(requires or [])
+        self.venv = venv
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.func(*args, **kwargs)
@@ -101,6 +103,7 @@ class Func(FunctionDecorator):
             self.tags,
             default=self.default,
             requires=self._requires,
+            venv=self._venv,
         )
 
     @property
@@ -113,6 +116,18 @@ class Func(FunctionDecorator):
     def requires(self, value: list[str]) -> None:
         self._requires = value
 
+    @property
+    def venv(self) -> str | None:
+        # Compute dynamically on lookup since ``self.python`` can be modified after
+        # creation (e.g. on an instance from ``self.copy``).
+        return (
+            self.format_dependency(self._venv) if self._venv is not None else self._venv
+        )
+
+    @venv.setter
+    def venv(self, value: str | None) -> None:
+        self._venv = value
+
     def format_dependency(self, dependency: str) -> str:
         if isinstance(self.python, (str, bool)) or self.python is None:
             formatted = dependency.format(python=self.python, py=self.python)
@@ -120,8 +135,8 @@ class Func(FunctionDecorator):
                 self.python is None or isinstance(self.python, bool)
             ):
                 raise ValueError(
-                    "Cannot parametrize requires with {python} when python is None or a"
-                    " bool."
+                    "Cannot parametrize requires or venv with {python} when python is"
+                    " None or a bool."
                 )
             return formatted
         raise TypeError(  # pragma: no cover
@@ -159,6 +174,7 @@ class Call(Func):
             func.tags + param_spec.tags,
             default=func.default,
             requires=func.requires,
+            venv=func.venv,
         )
         self.call_spec = call_spec
         self.session_signature = session_signature

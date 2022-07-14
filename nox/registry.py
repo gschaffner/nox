@@ -45,6 +45,7 @@ def session_decorator(
     *,
     default: bool = ...,
     requires: Sequence[str] | None = ...,
+    venv: str | None = ...,
 ) -> Callable[[F], F]: ...
 
 
@@ -60,6 +61,7 @@ def session_decorator(
     *,
     default: bool = True,
     requires: Sequence[str] | None = None,
+    venv: str | None = None,
 ) -> F | Callable[[F], F]:
     """Designate the decorated function as a session."""
     # If `func` is provided, then this is the decorator call with the function
@@ -81,6 +83,7 @@ def session_decorator(
             tags=tags,
             default=default,
             requires=requires,
+            venv=venv,
         )
 
     if py is not None and python is not None:
@@ -91,6 +94,15 @@ def session_decorator(
 
     if python is None:
         python = py
+
+    if venv is not None:
+        for param_name in ("reuse_venv", "venv_backend", "venv_params"):
+            var = locals()[param_name]
+            if var is not None:
+                raise ValueError(
+                    f"The {param_name} argument to nox.session cannot be used when"
+                    " using the venv argument."
+                )
 
     final_name = name or func.__name__
     fn = Func(
@@ -103,6 +115,7 @@ def session_decorator(
         tags=tags,
         default=default,
         requires=requires,
+        venv=venv,
     )
     _REGISTRY[final_name] = fn
     return fn
