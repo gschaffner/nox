@@ -50,6 +50,7 @@ def _make_session_func(requires: list[str]) -> nox._decorators.Func:
     func.tags = []
     func.default = True
     func.requires = requires
+    func.venv = None
     func.allow_parallel = False
     return func
 
@@ -70,6 +71,7 @@ session_func_with_python.python = "3.8"
 session_func_with_python.venv_backend = None
 session_func_with_python.default = True
 session_func_with_python.requires = []
+session_func_with_python.venv = None
 
 
 def session_func_venv_pythons_warning_raw() -> None:
