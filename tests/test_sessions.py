@@ -132,7 +132,7 @@ class TestSession:
     def make_session_and_runner(
         self,
     ) -> tuple[nox.sessions.Session, nox.sessions.SessionRunner]:
-        func = mock.Mock(spec=["python"], python="3.7")
+        func = mock.Mock(spec=["python", "venv"], python="3.7", venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
@@ -630,10 +630,11 @@ class TestSession:
     def test_conda_install(
         self, auto_offline: bool, offline: bool, conda: str, channel: str | list[str]
     ) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -705,10 +706,11 @@ class TestSession:
         ids=["no_constraint", "version_constraint", "pre_quoted"],
     )
     def test_conda_install_non_default_kwargs(self, pkg_requirement: str) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -752,10 +754,11 @@ class TestSession:
             session.install()
 
     def test_install(self) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -782,10 +785,11 @@ class TestSession:
             )
 
     def test_install_non_default_kwargs(self) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -810,10 +814,11 @@ class TestSession:
             )
 
     def test_install_no_venv_failure(self) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -843,10 +848,11 @@ class TestSession:
         ],
     )
     def test_install_verbose(self, verbose: bool, expected_silent: bool) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[], verbose=verbose),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -877,10 +883,11 @@ class TestSession:
         ],
     )
     def test_conda_install_verbose(self, verbose: bool, expected_silent: bool) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[], verbose=verbose),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -1008,10 +1015,11 @@ class TestSession:
         assert run.called is run_called
 
     def test_install_uv(self) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -1036,10 +1044,11 @@ class TestSession:
             )
 
     def test_install_uv_command(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        func = mock.Mock(spec=["venv"], venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -1127,6 +1136,7 @@ class TestSessionRunner:
         func.venv_params = []
         func.reuse_venv = False
         func.requires = []
+        func.venv = None
         return nox.sessions.SessionRunner(
             name="test",
             signatures=["test(1, 2)"],
@@ -1386,6 +1396,7 @@ class TestSessionRunner:
             session.error("meep")
 
         func.requires = []  # type: ignore[attr-defined]
+        func.venv = None  # type: ignore[attr-defined]
         runner.func = func  # type: ignore[assignment]
 
         result = runner.execute()
@@ -1399,6 +1410,7 @@ class TestSessionRunner:
             session.skip("meep")
 
         func.requires = []  # type: ignore[attr-defined]
+        func.venv = None  # type: ignore[attr-defined]
         runner.func = func  # type: ignore[assignment]
 
         result = runner.execute()
@@ -1465,6 +1477,7 @@ class TestSessionRunner:
             raise nox.command.CommandFailed()
 
         func.requires = []  # type: ignore[attr-defined]
+        func.venv = None  # type: ignore[attr-defined]
         runner.func = func  # type: ignore[assignment]
 
         result = runner.execute()
@@ -1489,6 +1502,7 @@ class TestSessionRunner:
             raise KeyboardInterrupt()
 
         func.requires = []  # type: ignore[attr-defined]
+        func.venv = None  # type: ignore[attr-defined]
         runner.func = func  # type: ignore[assignment]
 
         with pytest.raises(KeyboardInterrupt):
@@ -1502,6 +1516,7 @@ class TestSessionRunner:
             raise ValueError(msg)
 
         func.requires = []  # type: ignore[attr-defined]
+        func.venv = None  # type: ignore[attr-defined]
         runner.func = func  # type: ignore[assignment]
 
         result = runner.execute()
@@ -1520,6 +1535,7 @@ class TestSessionRunner:
             )
 
         func.requires = []  # type: ignore[attr-defined]
+        func.venv = None  # type: ignore[attr-defined]
         runner.func = func  # type: ignore[assignment]
 
         result = runner.execute()
