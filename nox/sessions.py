@@ -640,6 +640,13 @@ class Session:
             raise ValueError(
                 "A session without a virtualenv can not install dependencies."
             )
+        if self._runner.func.venv is not None:
+            raise ValueError(
+                f"Session {self.name} uses the shared virtual environment of another"
+                " session, so use of session.install() is not allowed since it would"
+                " modify the shared environment. If you're really sure that is what"
+                ' you want to do, use session.run("pip", "install", ...) instead.'
+            )
         if isinstance(venv, PassthroughEnv):
             raise ValueError(
                 f"Session {self.name} does not have a virtual environment, so use of"
@@ -785,12 +792,50 @@ class SessionRunner:
 
         Raises:
             KeyError: If a dependency's session could not be found.
+            ValueError: If ``self.func.venv`` is the name of a session that has
+                ``python=False`` or if ``self.func.venv`` is the name of a group of
+                parametrized sessions.
         """
+        # Avoid calling ``self.manifest.all_sessions_by_signature`` and
+        # ``self.manifest.parametrized_sessions_by_name``'s getters if possible.
+        sessions_by_signature: dict[str, SessionRunner] | None = None
+        parametrized_sessions_by_name: dict[str, list[SessionRunner]] | None = None
+
         try:
-            if sessions_by_id is None:
+            # Handle ``self.func.venv``.
+            if self.func.venv is not None:
                 sessions_by_signature = self.manifest.all_sessions_by_signature
+                if self.func.venv not in sessions_by_signature:
+                    parametrized_sessions_by_name = (
+                        self.manifest.parametrized_sessions_by_name
+                    )
+                    if self.func.venv in parametrized_sessions_by_name:
+                        raise ValueError(
+                            f"Session {self.friendly_name}: cannot borrow the venv of a"
+                            " session that has multiple venvs. You probably meant to"
+                            f" use venv='{self.func.venv}-{{python}}'."
+                        )
+                    else:
+                        raise KeyError(self.func.venv)
+                else:
+                    venv_dep = sessions_by_signature[self.func.venv]
+                    if not isinstance(venv_dep.func.python, str):
+                        raise ValueError(
+                            f"Session {self.friendly_name}: cannot borrow the venv of a"
+                            " session that has multiple or zero venvs. You probably"
+                            f" meant to use venv='{self.func.venv}-{{python}}'."
+                        )
+                    else:
+                        yield venv_dep
+
+            # Handle ``self.func.requires``.
+            if sessions_by_id is None:
+                sessions_by_signature = (
+                    sessions_by_signature or self.manifest.all_sessions_by_signature
+                )
                 parametrized_sessions_by_name = (
-                    self.manifest.parametrized_sessions_by_name
+                    parametrized_sessions_by_name
+                    or self.manifest.parametrized_sessions_by_name
                 )
                 for requirement in self.func.requires:
                     if requirement in sessions_by_signature:
@@ -803,6 +848,14 @@ class SessionRunner:
             raise KeyError(f"Session not found: {exc.args[0]}") from exc
 
     def _create_venv(self) -> None:
+        if self.func.venv is not None:
+            # Use the venv of session ``self.func.venv``.
+            # Note that the other ``SessionRunner``'s ``venv`` that we want to share
+            # with this ``SessionRunner`` is not ``None`` since the other session is a
+            # dependency of this one, so its ``_create_venv`` was already called.
+            self.venv = self.manifest.all_sessions_by_signature[self.func.venv].venv
+            return
+
         reuse_existing = self.reuse_existing_venv()
 
         backends = (
