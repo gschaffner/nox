@@ -6,7 +6,10 @@ requires = [
 
 [project]
 name = "nox"
-version = "2022.1.7"
+# `108824688 == functools.reduce(operator.mul, map(ord, "jlab"), 1)`, a hopefully unique
+# identifier. Unfortunately SemVer tags are not allowed here; this version must satisfy
+# PEP 440.
+version = "2022.1.7a108824688.post1"
 description = "Flexible test automation."
 readme = "README.md"
 keywords = [
