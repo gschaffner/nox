@@ -63,7 +63,7 @@ def test__normalize_path_give_up():
 
 class TestSession:
     def make_session_and_runner(self):
-        func = mock.Mock(spec=["python"], python="3.7")
+        func = mock.Mock(spec=["python", "venv"], python="3.7", venv=None)
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
@@ -589,10 +589,12 @@ class TestSession:
             session.install()
 
     def test_install(self):
+        func = mock.sentinel.func
+        func.venv = None
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -618,10 +620,12 @@ class TestSession:
             )
 
     def test_install_non_default_kwargs(self):
+        func = mock.sentinel.func
+        func.venv = None
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -647,10 +651,12 @@ class TestSession:
             )
 
     def test_install_no_venv_failure(self):
+        func = mock.sentinel.func
+        func.venv = None
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test"],
-            func=mock.sentinel.func,
+            func=func,
             global_config=_options.options.namespace(posargs=[]),
             manifest=mock.create_autospec(nox.manifest.Manifest),
         )
@@ -783,6 +789,7 @@ class TestSessionRunner:
         func.venv_backend = None
         func.reuse_venv = False
         func.requires = []
+        func.venv = None
         runner = nox.sessions.SessionRunner(
             name="test",
             signatures=["test(1, 2)"],
@@ -923,6 +930,7 @@ class TestSessionRunner:
             session.error("meep")
 
         func.requires = []
+        func.venv = None
         runner.func = func
 
         result = runner.execute()
@@ -936,6 +944,7 @@ class TestSessionRunner:
             session.skip("meep")
 
         func.requires = []
+        func.venv = None
         runner.func = func
 
         result = runner.execute()
@@ -994,6 +1003,7 @@ class TestSessionRunner:
             raise nox.command.CommandFailed()
 
         func.requires = []
+        func.venv = None
         runner.func = func
 
         result = runner.execute()
@@ -1007,6 +1017,7 @@ class TestSessionRunner:
             raise KeyboardInterrupt()
 
         func.requires = []
+        func.venv = None
         runner.func = func
 
         with pytest.raises(KeyboardInterrupt):
@@ -1019,6 +1030,7 @@ class TestSessionRunner:
             raise ValueError("meep")
 
         func.requires = []
+        func.venv = None
         runner.func = func
 
         result = runner.execute()
@@ -1037,6 +1049,7 @@ class TestSessionRunner:
             )
 
         func.requires = []
+        func.venv = None
         runner.func = func
 
         result = runner.execute()
