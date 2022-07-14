@@ -240,13 +240,10 @@ class Manifest:
             sessions_by_id[parent_name] = parent_session
 
         # Construct the dependency graph.
-        try:
-            dependency_graph = {
-                session: session.get_direct_dependencies(sessions_by_id)
-                for session in sessions_by_id.values()
-            }
-        except KeyError as exc:
-            raise KeyError(f"Session not found: {exc.args[0]}") from exc
+        dependency_graph = {
+            session: session.get_direct_dependencies(sessions_by_id)
+            for session in sessions_by_id.values()
+        }
 
         # Resolve the dependency graph.
         root = cast(SessionRunner, object())  # sentinel
