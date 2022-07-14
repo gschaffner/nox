@@ -63,6 +63,7 @@ def session_decorator(
     *,
     default: bool = ...,
     requires: Sequence[str] | None = ...,
+    venv: str | None = ...,
     download_python: Literal["auto", "never", "always"] | None = None,
 ) -> Callable[[RawFunc | Func], Func]: ...
 
@@ -80,6 +81,7 @@ def session_decorator(
     *,
     default: bool = True,
     requires: Sequence[str] | None = None,
+    venv: str | None = None,
     download_python: Literal["auto", "never", "always"] | None = None,
 ) -> Func | Callable[[RawFunc | Func], Func]:
     """Designate the decorated function as a session."""
@@ -102,6 +104,7 @@ def session_decorator(
             tags=tags,
             default=default,
             requires=requires,
+            venv=venv,
             download_python=download_python,
         )
 
@@ -118,6 +121,15 @@ def session_decorator(
     if python is None:
         python = py
 
+    if venv is not None:
+        base_msg = "The {param_name} argument to nox.session cannot be used when using the venv argument."
+        if reuse_venv is not None:
+            raise ValueError(base_msg.format(param_name="reuse_venv"))
+        if venv_backend is not None:
+            raise ValueError(base_msg.format(param_name="venv_backend"))
+        if venv_params != ():
+            raise ValueError(base_msg.format(param_name="venv_params"))
+
     reg_name = name or func.__name__
 
     fn = Func(
@@ -130,6 +142,7 @@ def session_decorator(
         tags=tags,
         default=default,
         requires=requires,
+        venv=venv,
         download_python=download_python,
     )
     if reg_name in _REGISTRY:
