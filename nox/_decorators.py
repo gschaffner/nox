@@ -124,7 +124,7 @@ class Func(FunctionDecorator):
                     " bool."
                 )
             return formatted
-        raise TypeError(
+        raise TypeError(  # pragma: no cover
             "The requires of a not-yet-parametrized session cannot be parametrized."
         )
 
