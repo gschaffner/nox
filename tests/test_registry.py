@@ -90,6 +90,14 @@ def test_session_decorator_py_alias_error() -> None:
             pass
 
 
+def test_session_decorator_shared_venv_error() -> None:
+    with pytest.raises(ValueError, match="argument"):
+
+        @registry.session_decorator(venv="a", reuse_venv=True)
+        def unit_tests(session: nox.Session) -> None:
+            pass
+
+
 def test_session_decorator_reuse() -> None:
     @registry.session_decorator(reuse_venv=True)
     def unit_tests(session: nox.Session) -> None:
