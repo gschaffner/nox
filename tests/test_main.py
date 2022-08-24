@@ -446,15 +446,19 @@ def test_main_with_bad_session_names(run_nox, session):
 
 
 @pytest.mark.parametrize(
-    ("sessions", "expected_order"),
+    ("noxfile_name", "sessions", "expected_order"),
     [
-        (("g", "a", "d"), ("b", "c", "h", "g", "a", "e", "d")),
-        (("m",), ("k-3.9", "k-3.10", "m")),
-        (("n",), ("k-3.10", "n")),
+        ("noxfile_requires.py", ("g", "a", "d"), ("b", "c", "h", "g", "a", "e", "d")),
+        ("noxfile_requires.py", ("m",), ("k-3.9", "k-3.10", "m")),
+        ("noxfile_requires.py", ("n",), ("k-3.10", "n")),
+        ("noxfile_venv.py", ("b",), ("a", "b")),
+        ("noxfile_venv.py", ("c",), ("a", "c")),
+        ("noxfile_venv.py", ("f",), ("e-3.10", "f")),
+        ("noxfile_venv.py", ("g",), ("e-3.9", "g-3.9", "e-3.10", "g-3.10")),
     ],
 )
-def test_main_requires(run_nox, sessions, expected_order):
-    noxfile = os.path.join(RESOURCES, "noxfile_requires.py")
+def test_main_requires(run_nox, noxfile_name, sessions, expected_order):
+    noxfile = os.path.join(RESOURCES, noxfile_name)
     returncode, stdout, _ = run_nox(f"--noxfile={noxfile}", "--sessions", *sessions)
     assert returncode == 0
     assert tuple(stdout.rstrip("\n").split("\n")) == expected_order
@@ -470,9 +474,13 @@ def test_main_requires_cycle(run_nox):
     assert "Sessions are in a dependency cycle: i -> j -> i" in stderr
 
 
-def test_main_requires_missing_session(run_nox):
-    noxfile = os.path.join(RESOURCES, "noxfile_requires.py")
-    returncode, _, stderr = run_nox(f"--noxfile={noxfile}", "--session=o")
+@pytest.mark.parametrize(
+    ("noxfile_name", "session"),
+    [("noxfile_requires.py", "o"), ("noxfile_venv.py", "i")],
+)
+def test_main_requires_missing_session(run_nox, noxfile_name, session):
+    noxfile = os.path.join(RESOURCES, noxfile_name)
+    returncode, _, stderr = run_nox(f"--noxfile={noxfile}", f"--session={session}")
     assert returncode != 0
     assert "Session not found: does_not_exist" in stderr
 
@@ -493,6 +501,32 @@ def test_main_requires_chain_fail(run_nox, session):
     returncode, _, stderr = run_nox(f"--noxfile={noxfile}", f"--session={session}")
     assert returncode != 0
     assert "Prerequisite session r was not successful" in stderr
+
+
+def test_main_venv_no_install(run_nox):
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    returncode, _, stderr = run_nox(f"--noxfile={noxfile}", "--session=d")
+    assert returncode != 0
+    assert "session.install() is not allowed" in stderr
+
+
+def test_main_venv_single_only(run_nox):
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    with pytest.raises(
+        ValueError, match="cannot borrow the venv of a session that has multiple venvs"
+    ):
+        returncode, _, _ = run_nox(f"--noxfile={noxfile}", "--session=h")
+        assert returncode != 0
+
+
+def test_main_venv_bad_python(run_nox):
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    with pytest.raises(
+        ValueError,
+        match="cannot borrow the venv of a session that has multiple or zero venvs",
+    ):
+        returncode, _, _ = run_nox(f"--noxfile={noxfile}", "--session=k")
+        assert returncode != 0
 
 
 def test_main_noxfile_options(monkeypatch):
