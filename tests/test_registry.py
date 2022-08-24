@@ -84,6 +84,14 @@ def test_session_decorator_py_alias_error(cleanup_registry):
             pass
 
 
+def test_session_decorator_shared_venv_error(cleanup_registry):
+    with pytest.raises(ValueError):
+
+        @registry.session_decorator(venv="a", reuse_venv=True)
+        def unit_tests(session):
+            pass
+
+
 def test_session_decorator_reuse(cleanup_registry):
     @registry.session_decorator(reuse_venv=True)
     def unit_tests(session):
