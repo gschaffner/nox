@@ -6,7 +6,24 @@ requires = [
 
 [project]
 name = "nox"
-version = "2025.05.01"
+# We can't just add a local version identifier to the upstream release that this is branched from
+# because this isn't API compatible with the aforementioned upstream release. Instead, we take the
+# aforementioned upstream release's version, increment its post release number (note: we "increment"
+# None to 0 if necessary), add devUID where UID is a large, hopefully-unique identifier, and then
+# add a local version identifier for good measure/human-readability.
+#
+# This causes our "release" to sort after the aforementioned upstream release and before any
+# upstream post-release of the aforementioned upstream release.
+#
+# This is still bad as we are claiming that this is a development release towards a post-release,
+# but post-releases _should_ be for metadata changes only. Regardless, we aren't in violation of PEP
+# 440 at least, and this is the best option I'm currently aware of.
+#
+# `1447014848733137083 == org_uid + offset` where
+# `org_uid = int.from_bytes(hashlib.blake2b(b"Andrew Jayich Lab").digest(), byteorder="big", signed=False) % 2**64`,
+# a hopefully unique identifier. The offset is used when we would otherwise be making a second
+# release with the same public version identifier as one we have made before.
+version = "2025.05.01-0.dev1447014848733137083+jlab.8"
 description = "Flexible test automation."
 readme = "README.md"
 keywords = [
