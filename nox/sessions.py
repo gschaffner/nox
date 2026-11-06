@@ -766,6 +766,16 @@ class Session:
             )
             raise TypeError(msg)
 
+        if self._runner.func.venv is not None:
+            msg = (
+                f"Session {self.name} uses the shared conda environment of another"
+                " session, so use of session.conda_install() is not allowed since it"
+                " would modify the shared environment. If you're really sure that is"
+                ' what you want to do, use session.run("conda", "install", ...)'
+                " instead."
+            )
+            raise ValueError(msg)
+
         if not args:
             msg = "At least one argument required to install()."
             raise ValueError(msg)
@@ -868,6 +878,14 @@ class Session:
         ):  # pragma: no cover
             msg = f"A session without a virtualenv (got {venv!r}) can not install dependencies."
             raise TypeError(msg)
+        if self._runner.func.venv is not None:
+            msg = (
+                f"Session {self.name} uses the shared virtual environment of another"
+                " session, so use of session.install() is not allowed since it would"
+                " modify the shared environment. If you're really sure that is what you"
+                ' want to do, use session.run("pip", "install", ...) instead.'
+            )
+            raise ValueError(msg)
         if isinstance(venv, PassthroughEnv):
             if self._runner.global_config.no_install:
                 return
@@ -1124,12 +1142,52 @@ class SessionRunner:
 
         Raises:
             KeyError: If a dependency's session could not be found.
+            ValueError: If ``self.func.venv`` is the name of a session that has
+                ``python=False`` or if ``self.func.venv`` is the name of a group of
+                parametrized sessions.
         """
+        # Avoid calling ``self.manifest.all_sessions_by_signature`` and
+        # ``self.manifest.parametrized_sessions_by_name``'s getters if possible.
+        sessions_by_signature: dict[str, SessionRunner] | None = None
+        parametrized_sessions_by_name: dict[str, list[SessionRunner]] | None = None
+
         try:
-            if sessions_by_id is None:
+            # Handle ``self.func.venv``.
+            if self.func.venv is not None:
                 sessions_by_signature = self.manifest.all_sessions_by_signature
+                if self.func.venv not in sessions_by_signature:
+                    parametrized_sessions_by_name = (
+                        self.manifest.parametrized_sessions_by_name
+                    )
+                    if self.func.venv in parametrized_sessions_by_name:
+                        msg = (
+                            f"Session {self.friendly_name}: cannot borrow the venv of a"
+                            " session that has multiple venvs. You probably meant to"
+                            f" use venv='{self.func.venv}-{{python}}'."
+                        )
+                        raise ValueError(msg)
+                    else:
+                        raise KeyError(self.func.venv)  # noqa: TRY301
+                else:
+                    venv_dep = sessions_by_signature[self.func.venv]
+                    if not isinstance(venv_dep.func.python, str):
+                        msg = (
+                            f"Session {self.friendly_name}: cannot borrow the venv of"
+                            " a session that has multiple or zero venvs. You probably"
+                            f" meant to use venv='{self.func.venv}-{{python}}'."
+                        )
+                        raise ValueError(msg)
+                    else:
+                        yield venv_dep
+
+            # Handle ``self.func.requires``.
+            if sessions_by_id is None:
+                sessions_by_signature = (
+                    sessions_by_signature or self.manifest.all_sessions_by_signature
+                )
                 parametrized_sessions_by_name = (
-                    self.manifest.parametrized_sessions_by_name
+                    parametrized_sessions_by_name
+                    or self.manifest.parametrized_sessions_by_name
                 )
                 for requirement in self.func.requires:
                     if requirement in sessions_by_signature:
@@ -1142,17 +1200,45 @@ class SessionRunner:
             msg = f"Session not found: {exc.args[0]}"
             raise KeyError(msg) from exc
 
-    def _create_venv(self) -> None:
-        self.venv = get_virtualenv(
-            *resolve_venv_backends(self.global_config, self.func),
-            download_python=resolve_download_python(self.global_config, self.func),
-            envdir=self.envdir,
-            reuse_existing=self.reuse_existing_venv(),
-            interpreter=self.func.python,
-            venv_params=self.func.venv_params,
-        )
+    def _set_venv(self, *, skip_create: bool = False) -> None:
+        if self.func.venv is not None:
+            # Use the venv of session ``self.func.venv``.
 
-        self.venv.create()
+            venv_dep_runner = self.manifest.all_sessions_by_signature[self.func.venv]
+            # Unless nox was called with ``--no-dependencies``, the other
+            # ``SessionRunner``'s ``venv`` that we want to share with this
+            # ``SessionRunner`` is not ``None`` since the other session is a dependency
+            # of this one, so its ``_set_venv`` was already called.
+            if venv_dep_runner.venv is None:
+                assert self.global_config.no_dependencies
+
+                if self.global_config.parallel_worker:
+                    # Since we're a subprocess, ``venv_dep_runner`` is not the
+                    # ``SessionRunner`` object that actually executed; we recreated that
+                    # ``SessionRunner`` object in this subprocess. We also need to
+                    # recreate ``venv_dep_runner.venv`` (but we must not recreate the
+                    # actual venv) in this subprocess.
+                    venv_dep_runner._set_venv(skip_create=True)
+                else:
+                    msg = (
+                        "venv borrowing is not supported with --no-dependencies (except"
+                        " when Nox uses --no-dependencies internally for --parallel)"
+                    )
+                    raise ValueError(msg)
+
+            self.venv = venv_dep_runner.venv
+        else:
+            self.venv = get_virtualenv(
+                *resolve_venv_backends(self.global_config, self.func),
+                download_python=resolve_download_python(self.global_config, self.func),
+                envdir=self.envdir,
+                reuse_existing=self.reuse_existing_venv(),
+                interpreter=self.func.python,
+                venv_params=self.func.venv_params,
+            )
+
+            if not skip_create:
+                self.venv.create()
 
     def reuse_existing_venv(self) -> bool:
         """
@@ -1181,7 +1267,7 @@ class SessionRunner:
             cwd = os.path.realpath(os.path.dirname(self.global_config.noxfile))
 
             with _chdir(cwd):
-                self._create_venv()
+                self._set_venv()
                 session = Session(self)
                 session.env["NOX_CURRENT_SESSION"] = session.name
                 self.func(session)
