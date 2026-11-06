@@ -77,6 +77,7 @@ class Func:
         *,
         default: bool = True,
         requires: Sequence[str] | None = None,
+        venv: str | None = None,
         download_python: Literal["auto", "never", "always"] | None = None,
         allow_parallel: bool | None = None,
     ) -> None:
@@ -90,6 +91,7 @@ class Func:
         self.tags = list(tags or [])
         self.default = default
         self.requires = list(requires or [])
+        self.venv = venv
         self.download_python = download_python
         self.allow_parallel = allow_parallel
 
@@ -113,6 +115,7 @@ class Func:
             self.tags,
             default=self.default,
             requires=self._requires,
+            venv=self._venv,
             download_python=self.download_python,
             allow_parallel=self.allow_parallel,
         )
@@ -127,13 +130,25 @@ class Func:
     def requires(self, value: Sequence[str]) -> None:
         self._requires = list(value)
 
+    @property
+    def venv(self) -> str | None:
+        # Compute dynamically on lookup since ``self.python`` can be modified after
+        # creation (e.g. on an instance from ``self.copy``).
+        return (
+            self.format_dependency(self._venv) if self._venv is not None else self._venv
+        )
+
+    @venv.setter
+    def venv(self, value: str | None) -> None:
+        self._venv = value
+
     def format_dependency(self, dependency: str) -> str:
         if isinstance(self.python, (bool, str)) or self.python is None:
             formatted = dependency.format(python=self.python, py=self.python)
             if (
                 self.python is None or isinstance(self.python, bool)
             ) and formatted != dependency:
-                msg = "Cannot parametrize requires with {python} when python is None or a bool."
+                msg = "Cannot parametrize requires or venv with {python} when python is None or a bool."
                 raise ValueError(msg)
             return formatted
         msg = "The requires of a not-yet-parametrized session cannot be parametrized."  # pragma: no cover
@@ -170,6 +185,7 @@ class Call(Func):
             func.tags + param_spec.tags,
             default=func.default,
             requires=func.requires,
+            venv=func.venv,
             download_python=func.download_python,
             allow_parallel=func.allow_parallel,
         )

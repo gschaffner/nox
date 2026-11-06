@@ -1218,19 +1218,19 @@ class TestSessionRunner:
         runner.func = foo  # type: ignore[assignment]
         assert runner.full_description is None
 
-    def test__create_venv_process_env(self) -> None:
+    def test__set_venv_process_env(self) -> None:
         runner = self.make_runner()
         runner.func.python = False
 
-        runner._create_venv()
+        runner._set_venv()
 
         assert isinstance(runner.venv, nox.virtualenv.ProcessEnv)
 
     @mock.patch("nox.virtualenv.VirtualEnv.create", autospec=True)
-    def test__create_venv(self, create: mock.Mock) -> None:
+    def test__set_venv(self, create: mock.Mock) -> None:
         runner = self.make_runner()
 
-        runner._create_venv()
+        runner._set_venv()
 
         create.assert_called_once_with(runner.venv)
         assert isinstance(runner.venv, nox.virtualenv.VirtualEnv)
@@ -1256,7 +1256,7 @@ class TestSessionRunner:
             ),
         ],
     )
-    def test__create_venv_options(
+    def test__set_venv_options(
         self,
         create_method: str,
         venv_backend: str | None,
@@ -1268,18 +1268,18 @@ class TestSessionRunner:
         runner.func.venv_backend = venv_backend
 
         with mock.patch(create_method, autospec=True) as create:
-            runner._create_venv()
+            runner._set_venv()
 
         create.assert_called_once_with(runner.venv)
         assert isinstance(runner.venv, expected_backend)
         assert runner.venv.interpreter == "coolpython"
         assert runner.venv.reuse_existing is True
 
-    def test__create_venv_unexpected_venv_backend(self) -> None:
+    def test__set_venv_unexpected_venv_backend(self) -> None:
         runner = self.make_runner()
         runner.func.venv_backend = "somenewenvtool"
         with pytest.raises(ValueError, match="venv_backend"):
-            runner._create_venv()
+            runner._set_venv()
 
     @pytest.mark.parametrize(
         "venv_backend",
@@ -1296,7 +1296,7 @@ class TestSessionRunner:
             {"uv": False, "conda": False, "mamba": False},
         )
         with mock.patch("nox.virtualenv.VirtualEnv.create", autospec=True):
-            runner._create_venv()
+            runner._set_venv()
         assert runner.venv
         assert runner.venv.venv_backend == venv_backend.rsplit("|", maxsplit=1)[-1]
 
@@ -1326,7 +1326,7 @@ class TestSessionRunner:
                 match=r"No backends present|Only optional backends|Expected venv_backend",
             ),
         ):
-            runner._create_venv()
+            runner._set_venv()
 
     @pytest.mark.parametrize(
         ("reuse_venv", "reuse_venv_func", "should_reuse"),
@@ -1363,7 +1363,7 @@ class TestSessionRunner:
 
     def make_runner_with_mock_venv(self) -> nox.sessions.SessionRunner:
         runner = self.make_runner()
-        runner._create_venv = mock.Mock()  # type: ignore[method-assign]
+        runner._set_venv = mock.Mock()  # type: ignore[method-assign]
         runner.venv = make_fake_env()
         assert isinstance(runner.venv, nox.virtualenv.VirtualEnv)
         return runner
@@ -1423,7 +1423,7 @@ class TestSessionRunner:
         monkeypatch.delenv("CI", raising=False)
 
         runner = self.make_runner_with_mock_venv()
-        runner._create_venv.side_effect = nox.virtualenv.InterpreterNotFound("meep")  # type: ignore[attr-defined]
+        runner._set_venv.side_effect = nox.virtualenv.InterpreterNotFound("meep")  # type: ignore[attr-defined]
 
         result = runner.execute()
 
@@ -1439,7 +1439,7 @@ class TestSessionRunner:
     ) -> None:
         monkeypatch.setenv("CI", "True")
         runner = self.make_runner_with_mock_venv()
-        runner._create_venv.side_effect = nox.virtualenv.InterpreterNotFound("meep")  # type: ignore[attr-defined]
+        runner._set_venv.side_effect = nox.virtualenv.InterpreterNotFound("meep")  # type: ignore[attr-defined]
 
         result = runner.execute()
 
@@ -1450,7 +1450,7 @@ class TestSessionRunner:
     def test_execute_error_missing_interpreter(self) -> None:
         runner = self.make_runner_with_mock_venv()
         runner.global_config.error_on_missing_interpreters = True
-        runner._create_venv.side_effect = nox.virtualenv.InterpreterNotFound("meep")  # type: ignore[attr-defined]
+        runner._set_venv.side_effect = nox.virtualenv.InterpreterNotFound("meep")  # type: ignore[attr-defined]
 
         result = runner.execute()
 
