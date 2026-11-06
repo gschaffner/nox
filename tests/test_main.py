@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import contextlib
+import itertools
 import os
 import re
 import shutil
@@ -36,6 +37,9 @@ import nox.sessions
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+HAS_CONDA = shutil.which("conda") is not None
+has_conda = pytest.mark.skipif(not HAS_CONDA, reason="Missing conda command.")
 
 RESOURCES = os.path.join(os.path.dirname(__file__), "resources")
 VERSION = metadata.version("nox")
@@ -584,24 +588,77 @@ py310py311 = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize(
-    ("sessions", "expected_order"),
+    ("noxfile_name", "sessions", "parallel", "expected_order"),
     [
-        (("g", "a", "d"), ("b", "c", "h", "g", "a", "e", "d")),
-        pytest.param(("m",), ("k-3.10", "k-3.11", "m"), marks=py310py311),
-        pytest.param(("n",), ("k-3.11", "n"), marks=py310py311),
-        (("v",), ("u(django='1.9')", "u(django='2.0')", "v")),
-        (("w",), ("u(django='1.9')", "u(django='2.0')", "w")),
+        (
+            "noxfile_requires.py",
+            ("g", "a", "d"),
+            False,
+            ("b", "c", "h", "g", "a", "e", "d"),
+        ),
+        pytest.param(
+            "noxfile_requires.py",
+            ("m",),
+            False,
+            ("k-3.10", "k-3.11", "m"),
+            marks=py310py311,
+        ),
+        pytest.param(
+            "noxfile_requires.py", ("n",), False, ("k-3.11", "n"), marks=py310py311
+        ),
+        (
+            "noxfile_requires.py",
+            ("v",),
+            False,
+            ("u(django='1.9')", "u(django='2.0')", "v"),
+        ),
+        (
+            "noxfile_requires.py",
+            ("w",),
+            False,
+            ("u(django='1.9')", "u(django='2.0')", "w"),
+        ),
+        ("noxfile_venv.py", ("b",), False, ("a", "b")),
+        ("noxfile_venv.py", ("b",), True, ("a", "b")),
+        ("noxfile_venv.py", ("c",), False, ("a", "c")),
+        pytest.param(
+            "noxfile_venv.py", ("h",), False, ("g-3.11", "h"), marks=py310py311
+        ),
+        pytest.param(
+            "noxfile_venv.py",
+            ("i",),
+            False,
+            ("g-3.10", "i-3.10", "g-3.11", "i-3.11"),
+            marks=py310py311,
+        ),
     ],
 )
 def test_main_requires(
     run_nox: Callable[..., tuple[Any, Any, Any]],
+    noxfile_name: str,
     sessions: tuple[str, ...],
+    parallel: bool,
     expected_order: tuple[str, ...],
 ) -> None:
-    noxfile = os.path.join(RESOURCES, "noxfile_requires.py")
-    returncode, stdout, _ = run_nox(f"--noxfile={noxfile}", "--sessions", *sessions)
+    noxfile = os.path.join(RESOURCES, noxfile_name)
+    returncode, stdout, _ = run_nox(
+        f"--noxfile={noxfile}",
+        "--sessions",
+        *sessions,
+        "--allow-parallel",
+        f"--parallel={'auto' if parallel else 1}",
+    )
     assert returncode == 0
-    assert tuple(stdout.rstrip("\n").split("\n")) == expected_order
+    if not parallel:
+        assert tuple(stdout.rstrip("\n").split("\n")) == expected_order
+    else:
+        # --parallel mixes Nox's stderr into the user's stdout instead of keeping them
+        # separate.
+        stdout_lines = stdout.rstrip("\n").split("\n")
+        assert all(
+            stdout_lines.index(expected_1) < stdout_lines.index(expected_2)
+            for (expected_1, expected_2) in itertools.pairwise(expected_order)
+        )
 
 
 def test_main_requires_cycle(run_nox: Callable[..., tuple[Any, Any, Any]]) -> None:
@@ -614,11 +671,18 @@ def test_main_requires_cycle(run_nox: Callable[..., tuple[Any, Any, Any]]) -> No
     assert "Sessions are in a dependency cycle: i -> j -> i" in stderr
 
 
+@pytest.mark.parametrize(
+    ("noxfile_name", "session"),
+    [
+        ("noxfile_requires.py", "o"),
+        ("noxfile_venv.py", "k"),
+    ],
+)
 def test_main_requires_missing_session(
-    run_nox: Callable[..., tuple[Any, Any, Any]],
+    run_nox: Callable[..., tuple[Any, Any, Any]], noxfile_name: str, session: str
 ) -> None:
-    noxfile = os.path.join(RESOURCES, "noxfile_requires.py")
-    returncode, _, stderr = run_nox(f"--noxfile={noxfile}", "--session=o")
+    noxfile = os.path.join(RESOURCES, noxfile_name)
+    returncode, _, stderr = run_nox(f"--noxfile={noxfile}", f"--session={session}")
     assert returncode != 0
     assert "Session not found: does_not_exist" in stderr
 
@@ -651,6 +715,18 @@ def test_main_requries_modern_param(
     assert returncode == 0
 
 
+def test_main_venv_sharing_no_dependencies(
+    run_nox: Callable[..., tuple[Any, Any, Any]],
+) -> None:
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    returncode, _, stderr = run_nox(
+        f"--noxfile={noxfile}", "--session=b", "--no-dependencies"
+    )
+
+    assert returncode != 0
+    assert "venv borrowing is not supported with --no-dependencies" in stderr
+
+
 def test_main_list_with_empty_parametrize(
     run_nox: Callable[..., tuple[Any, Any, Any]],
 ) -> None:
@@ -679,6 +755,52 @@ def test_main_duplicate_session(
     msg = "The session 'foo' has already been registered"
     with pytest.warns(FutureWarning, match=re.escape(msg)):
         run_nox(f"--noxfile={noxfile}")
+
+
+def test_main_venv_no_install(
+    run_nox: Callable[..., tuple[Any, Any, Any]],
+) -> None:
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    returncode, _, stderr = run_nox(f"--noxfile={noxfile}", "--session=d")
+    assert returncode != 0
+    assert (
+        "session.install() is not allowed since it would modify the shared environment"
+        in stderr
+    )
+
+
+@has_conda
+def test_main_venv_no_conda_install(
+    run_nox: Callable[..., tuple[Any, Any, Any]],
+) -> None:
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    returncode, _, stderr = run_nox(f"--noxfile={noxfile}", "--session=f")
+    assert returncode != 0
+    assert (
+        "session.conda_install() is not allowed since it would modify the shared environment"
+        in stderr
+    )
+
+
+def test_main_venv_single_only(
+    run_nox: Callable[..., tuple[Any, Any, Any]],
+) -> None:
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    with pytest.raises(
+        ValueError, match="cannot borrow the venv of a session that has multiple venvs"
+    ):
+        run_nox(f"--noxfile={noxfile}", "--session=j")
+
+
+def test_main_venv_bad_python(
+    run_nox: Callable[..., tuple[Any, Any, Any]],
+) -> None:
+    noxfile = os.path.join(RESOURCES, "noxfile_venv.py")
+    with pytest.raises(
+        ValueError,
+        match="cannot borrow the venv of a session that has multiple or zero venvs",
+    ):
+        run_nox(f"--noxfile={noxfile}", "--session=n")
 
 
 def test_main_noxfile_options(
