@@ -326,6 +326,7 @@ def _child_argv(
         "keywords": None,
         "tags": None,
         "parallel": 1,
+        "parallel_worker": True,
         "no_dependencies": True,
         "report": report_path,
     }
